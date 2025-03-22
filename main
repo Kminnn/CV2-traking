@@ -1,0 +1,116 @@
+import cv2
+import math
+import numpy as np
+
+# Load YOLO
+config_file = "/home/khemin/yolov3.cfg"  
+weights_file = "/home/khemin/yolov3.weights"  
+class_file = "/home/khemin/coco.names"  
+
+
+# Load YOLO network
+net = cv2.dnn.readNet(weights_file, config_file)
+layer_names = net.getLayerNames()
+output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
+
+# Load class names (COCO names)
+with open(class_file, 'r') as f:
+    classes = [line.strip() for line in f.readlines()]
+
+# Initialize webcam
+cap = cv2.VideoCapture(0)  # 0 for webcam
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Prepare the image for YOLO
+    blob = cv2.dnn.blobFromImage(frame, 0.00392, (128, 128), (0, 0, 0), True, crop=False)
+    net.setInput(blob)
+    outs = net.forward(output_layers)
+
+    # Process detections
+    class_ids = []
+    confidences = []
+    boxes = []
+    height, width, channels = frame.shape
+
+    for out in outs:
+        for detection in out:
+            scores = detection[5:]
+            class_id = np.argmax(scores)
+            confidence = scores[class_id]
+            if confidence > 0.75:  # Confidence threshold
+                center_x = int(detection[0] * width)
+                center_y = int(detection[1] * height)
+                w = int(detection[2] * width)
+                h = int(detection[3] * height)
+
+                x = int(center_x - w / 2)
+                y = int(center_y - h / 2)
+
+                boxes.append([x, y, w, h])
+                confidences.append(float(confidence))
+                class_ids.append(class_id)
+
+    indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+
+    # Draw bounding boxes
+    for i in range(len(boxes)):
+        if i in indexes:
+            x, y, w, h = boxes[i]
+            wantedX = 325
+            wantedY = 250
+            label = str(classes[class_ids[i]])
+            confidence = str(round(confidences[i], 4))
+            color = (0, 255, 0)  # Green color for faces
+            color2 = (0, 0, 255)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 1)
+            cv2.line(frame,(wantedX,wantedY),(center_x,center_y),color2, 2)
+            #cv2.putText(frame, label + " " + confidence, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            d = math.sqrt((wantedX-center_x)**2 + (wantedY-center_y)**2)
+            cv2.putText(frame, "distance" + ": " + str(d), (center_x, center_y - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color2, 2)
+            #print(center_x,center_y,w,h)
+            #print(x,y)
+            
+            if d > 20:
+                spin = True
+                spinX = wantedX - center_x
+                spinY = wantedY - center_y
+                #print(d)
+                print(spinX, spinY)
+
+                if spinX > 0:
+                    a = 'LEFT'
+
+                elif spinX < 0:
+                    a = 'RIGHT'
+
+                # if spinY > 0:
+                #     b = 'UP'
+
+                # elif spinY < 0:
+                #     b = 'DOWN'
+
+                print(a)
+
+                
+
+            else:
+                spin = False
+                print("PERFECT")
+                break
+
+                
+            
+
+    # Show the result
+    cv2.imshow("Detection", frame)
+
+    # Exit on 'ESC'
+    if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+cap.release()
+cv2.destroyAllWindows()
